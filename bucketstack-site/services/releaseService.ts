@@ -1,23 +1,22 @@
-interface PlatformRelease {
-  url: string;
-  signature?: string;
+const REPO = 'SaiAkashNeela/bucketstack';
+const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
+
+interface GitHubAsset {
+  name: string;
+  browser_download_url: string;
 }
 
-interface ReleaseManifest {
-  version: string;
-  notes: string;
-  pub_date: string;
-  platforms: {
-    [key: string]: PlatformRelease;
-  };
+interface GitHubRelease {
+  tag_name: string;
+  assets: GitHubAsset[];
 }
 
 export const releaseService = {
-  async getLatestRelease(): Promise<ReleaseManifest | null> {
+  async getLatestRelease(): Promise<GitHubRelease | null> {
     try {
       const response = await fetch(
-        'https://github.com/SaiAkashNeela/bucketstack/releases/latest/download/latest.json',
-        { cache: 'no-store' }
+        `https://api.github.com/repos/${REPO}/releases/latest`,
+        { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' }
       );
 
       if (!response.ok) {
@@ -25,32 +24,37 @@ export const releaseService = {
         return null;
       }
 
-      const manifest: ReleaseManifest = await response.json();
-      return manifest;
+      return (await response.json()) as GitHubRelease;
     } catch (error) {
-      console.error('Error fetching latest release manifest:', error);
+      console.error('Error fetching latest release:', error);
       return null;
     }
   },
 
   async getDownloadLinks() {
-    const manifest = await this.getLatestRelease();
+    const release = await this.getLatestRelease();
 
-    if (!manifest) {
-      // Fallback to v1.0.1
+    if (!release) {
       return {
         version: null,
-        macos: 'https://github.com/SaiAkashNeela/bucketstack/releases/download/v1.0.3/BucketStack_1.0.3_aarch64.dmg',
-        windows: 'https://github.com/SaiAkashNeela/bucketstack/releases/download/v1.0.3/BucketStack_1.0.3_x64-setup.exe',
-        linux: 'https://github.com/SaiAkashNeela/bucketstack/releases/tag/v1.0.3',
+        macos: RELEASES_PAGE,
+        windows: RELEASES_PAGE,
+        linux: RELEASES_PAGE,
       };
     }
 
+    const assets = release.assets;
+    const version = release.tag_name.replace(/^v/, '');
+
+    const dmg = assets.find((a) => a.name.endsWith('.dmg'))?.browser_download_url;
+    const exe = assets.find((a) => a.name.endsWith('.exe'))?.browser_download_url;
+    const linuxTag = `https://github.com/${REPO}/releases/tag/${release.tag_name}`;
+
     return {
-      version: manifest.version,
-      macos: manifest.platforms['darwin-aarch64']?.url || 'https://github.com/SaiAkashNeela/bucketstack/releases',
-      windows: manifest.platforms['windows-x86_64']?.url || 'https://github.com/SaiAkashNeela/bucketstack/releases',
-      linux: manifest.platforms['linux-x86_64']?.url || 'https://github.com/SaiAkashNeela/bucketstack/releases',
+      version,
+      macos: dmg ?? RELEASES_PAGE,
+      windows: exe ?? RELEASES_PAGE,
+      linux: linuxTag,
     };
   },
 };
