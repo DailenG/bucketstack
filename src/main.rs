@@ -1577,6 +1577,8 @@ async fn abort_multipart_upload(
 // Copy a single file/object (like aws s3 cp)
 #[command]
 async fn copy_object_file(
+    window: tauri::Window,
+    job_id: String,
     endpoint: String,
     region: String,
     access_key_id: String,
@@ -1588,7 +1590,7 @@ async fn copy_object_file(
 ) -> Result<bool, String> {
     let access_key_id = access_key_id.trim();
     let secret_access_key = secret_access_key.trim();
-    
+
     let credentials = aws_sdk_s3::config::Credentials::new(
         access_key_id.to_string(),
         secret_access_key.to_string(),
@@ -1604,14 +1606,33 @@ async fn copy_object_file(
         .await;
 
     let mut s3_config = aws_sdk_s3::config::Builder::from(&config);
-    
+
     if !endpoint.is_empty() && endpoint != "https://s3.amazonaws.com" {
         s3_config = s3_config.endpoint_url(endpoint.clone());
         s3_config = s3_config.force_path_style(true);
     }
 
     let client = S3Client::from_conf(s3_config.build());
-    
+
+    // Get file size for progress reporting
+    let size = client
+        .head_object()
+        .bucket(&source_bucket)
+        .key(&source_key)
+        .send()
+        .await
+        .map(|r| r.content_length().unwrap_or(0) as u64)
+        .unwrap_or(0);
+
+    let _ = window.emit("transfer-progress", TransferProgress {
+        job_id: job_id.clone(),
+        bytes_transferred: 0,
+        total_bytes: size,
+        speed: 0.0,
+        status: "active".to_string(),
+        error: None,
+    });
+
     // Copy single object
     let copy_source = format!("{}/{}", source_bucket, source_key);
     client
@@ -1623,12 +1644,23 @@ async fn copy_object_file(
         .await
         .map_err(|e| format!("Failed to copy object: {}", e))?;
 
+    let _ = window.emit("transfer-progress", TransferProgress {
+        job_id: job_id.clone(),
+        bytes_transferred: size,
+        total_bytes: size,
+        speed: 0.0,
+        status: "completed".to_string(),
+        error: None,
+    });
+
     Ok(true)
 }
 
 // Copy a folder recursively (like aws s3 sync)
 #[command]
 async fn copy_objects_folder(
+    window: tauri::Window,
+    job_id: String,
     endpoint: String,
     region: String,
     access_key_id: String,
@@ -1640,7 +1672,7 @@ async fn copy_objects_folder(
 ) -> Result<bool, String> {
     let access_key_id = access_key_id.trim();
     let secret_access_key = secret_access_key.trim();
-    
+
     let credentials = aws_sdk_s3::config::Credentials::new(
         access_key_id.to_string(),
         secret_access_key.to_string(),
@@ -1656,23 +1688,58 @@ async fn copy_objects_folder(
         .await;
 
     let mut s3_config = aws_sdk_s3::config::Builder::from(&config);
-    
+
     if !endpoint.is_empty() && endpoint != "https://s3.amazonaws.com" {
         s3_config = s3_config.endpoint_url(endpoint.clone());
         s3_config = s3_config.force_path_style(true);
     }
 
     let client = S3Client::from_conf(s3_config.build());
-    
-    // List all objects in the source folder
+
+    // First pass: count total bytes for accurate progress
+    let mut total_bytes: u64 = 0;
     let mut continuation_token: Option<String> = None;
+    loop {
+        let mut list_req = client
+            .list_objects_v2()
+            .bucket(&source_bucket)
+            .prefix(&source_prefix);
+        if let Some(token) = continuation_token {
+            list_req = list_req.continuation_token(token);
+        }
+        let result = list_req.send().await.map_err(|e| format!("Failed to list objects: {}", e))?;
+        for obj in result.contents() {
+            if obj.key().map(|k| !k.ends_with('/')).unwrap_or(false) {
+                total_bytes += obj.size().unwrap_or(0) as u64;
+            }
+        }
+        if result.is_truncated().unwrap_or(false) {
+            continuation_token = result.next_continuation_token().map(|s| s.to_string());
+        } else {
+            break;
+        }
+    }
+
+    let _ = window.emit("transfer-progress", TransferProgress {
+        job_id: job_id.clone(),
+        bytes_transferred: 0,
+        total_bytes,
+        speed: 0.0,
+        status: "active".to_string(),
+        error: None,
+    });
+
+    // Second pass: copy objects and emit progress per file
+    let mut bytes_transferred: u64 = 0;
+    let mut continuation_token: Option<String> = None;
+    let start_time = std::time::Instant::now();
 
     loop {
         let mut list_req = client
             .list_objects_v2()
             .bucket(&source_bucket)
             .prefix(&source_prefix);
-        
+
         if let Some(token) = continuation_token {
             list_req = list_req.continuation_token(token);
         }
@@ -1682,15 +1749,16 @@ async fn copy_objects_folder(
             .await
             .map_err(|e| format!("Failed to list objects: {}", e))?;
 
-        // Copy all objects in this batch
-        let contents = result.contents();
-        for obj in contents {
+        for obj in result.contents() {
             if let Some(key) = obj.key() {
+                if key.ends_with('/') {
+                    continue;
+                }
                 let key_str = key.to_string();
-                // Calculate the destination key by replacing source prefix with dest prefix
                 let relative_key = key_str.strip_prefix(&source_prefix).unwrap_or(&key_str);
                 let dest_key = format!("{}{}", dest_prefix, relative_key);
-                
+                let file_size = obj.size().unwrap_or(0) as u64;
+
                 let copy_source = format!("{}/{}", source_bucket, key_str);
                 client
                     .copy_object()
@@ -1700,16 +1768,36 @@ async fn copy_objects_folder(
                     .send()
                     .await
                     .map_err(|e| format!("Failed to copy object {}: {}", key_str, e))?;
+
+                bytes_transferred += file_size;
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 { bytes_transferred as f64 / elapsed } else { 0.0 };
+                let _ = window.emit("transfer-progress", TransferProgress {
+                    job_id: job_id.clone(),
+                    bytes_transferred,
+                    total_bytes,
+                    speed,
+                    status: "active".to_string(),
+                    error: None,
+                });
             }
         }
 
-        // Check if there are more results
         if result.is_truncated().unwrap_or(false) {
             continuation_token = result.next_continuation_token().map(|s| s.to_string());
         } else {
             break;
         }
     }
+
+    let _ = window.emit("transfer-progress", TransferProgress {
+        job_id: job_id.clone(),
+        bytes_transferred: total_bytes,
+        total_bytes,
+        speed: 0.0,
+        status: "completed".to_string(),
+        error: None,
+    });
 
     Ok(true)
 }

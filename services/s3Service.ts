@@ -972,6 +972,7 @@ export const s3Service = {
 
         // For folders, use recursive sync (like aws s3 sync)
         await invoke<boolean>('copy_objects_folder', {
+          jobId: '',
           endpoint: sanitizedEndpoint,
           region: account.region,
           accessKeyId: account.accessKeyId.trim(),
@@ -986,6 +987,7 @@ export const s3Service = {
 
         // For single files, use simple copy (like aws s3 cp)
         await invoke<boolean>('copy_object_file', {
+          jobId: '',
           endpoint: sanitizedEndpoint,
           region: account.region,
           accessKeyId: account.accessKeyId.trim(),
@@ -1169,6 +1171,7 @@ export const s3Service = {
           // Optimized intra-provider copy
           if (job.isFolder) {
             await invoke('copy_objects_folder', {
+              jobId: job.id,
               endpoint: sEndpoint,
               region: sourceAcc.region,
               accessKeyId: sourceAcc.accessKeyId,
@@ -1180,6 +1183,7 @@ export const s3Service = {
             });
           } else {
             await invoke('copy_object_file', {
+              jobId: job.id,
               endpoint: sEndpoint,
               region: sourceAcc.region,
               accessKeyId: sourceAcc.accessKeyId,

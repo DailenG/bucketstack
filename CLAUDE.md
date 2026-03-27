@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 BucketStack is a native desktop S3 management application built with **Tauri** (Rust backend), **React** (TypeScript frontend), and **Tailwind CSS** for styling. The app supports macOS, Windows, and Linux with features like file management, data sync, activity logging, and storage analytics.
 
 Key tech stack:
-- **Frontend**: React 19 + TypeScript, Vite bundler, Tailwind CSS 4, Monaco Editor
+- **Frontend**: React 19 + TypeScript, Vite bundler, Tailwind CSS 4, Monaco Editor, Recharts (storage analytics)
 - **Backend**: Rust with Tauri 2.0, AWS SDK, SQLite for activity logs, machine-bound secure storage (AES-256-GCM)
 - **Desktop**: Multi-window (main app + tray window), system tray integration, native drag-and-drop
 - **Supported S3 providers**: AWS S3, Cloudflare R2, MinIO, Wasabi, Backblaze B2, and any S3-compatible endpoint
@@ -31,11 +31,12 @@ The application has a clear separation between frontend (React/TypeScript) and b
 - Communicates with backend via `invoke()` from `@tauri-apps/api/core`
 
 **Component Organization**:
-- **Core UI**: `Sidebar.tsx` (navigation), `FileExplorer.tsx` (main file browser), `TrayWindow.tsx` (tray menu)
-- **Modals**: Account management, file editing, transfer management, activity logging, backup sync, storage analytics
+- **Core UI**: `Sidebar.tsx` (navigation), `FileExplorer.tsx` (main file browser), `TrayWindow.tsx` (tray menu), `TransferProgressPanel.tsx` (floating transfer status), `BackgroundSync.tsx` (background sync indicator)
+- **Modals**: `AccountModal.tsx`, `AddConnectionModal.tsx`, `FileEditorModal.tsx`, `TransferModal.tsx`, `ActivityLog.tsx`, `SyncManager.tsx`, `StorageAnalytics.tsx`, `MoveToModal.tsx`, `MultiBucketModal.tsx`, `LinkExpiryModal.tsx`, `UploadConflictModal.tsx`, `AboutModal.tsx`, `TermsModal.tsx`
+- **UI Primitives**: `Button.tsx`, `ThemeProvider.tsx`, `ThemeToggle.tsx`, `TipCarousel.tsx`, `ErrorBoundary.tsx`, `MonacoFilePreview.tsx`
 - **Services**: `s3Service.ts` (S3 operations), `activityService.ts` (activity logging wrapper)
-- **Hooks**: `useMenuBar.ts` (menu bar integration), custom hooks for theme and window management
-- **Utilities**: `types.ts` contains all TypeScript interfaces, theme provider
+- **Hooks**: `hooks/useMenuBar.ts` (menu bar integration)
+- **Utilities**: `types.ts` contains all TypeScript interfaces
 
 **Key State Patterns**:
 - State is stored in `App.tsx` and passed down to components
@@ -45,7 +46,7 @@ The application has a clear separation between frontend (React/TypeScript) and b
 ### Rust Backend Architecture
 
 **Main Entry** (`src/main.rs`):
-- Single large file (~2700 lines) containing:
+- Single large file (~2887 lines) containing:
   - **Tauri Command Handlers**: `#[command]` functions invoked from frontend via `invoke()`
   - **S3 Operations**: Bucket listing, file upload/download, copying, moving, compression
   - **Activity Logging**: SQLite database for operation tracking, initialized at app startup
@@ -93,11 +94,16 @@ Useful for UI-only changes. Runs on http://localhost:3000 but won't work with ba
 
 ### Building for Production
 
+**Type Check Only** (no output):
+```bash
+pnpm exec tsc --noEmit
+```
+
 **Web Build Only**:
 ```bash
 pnpm run build
 ```
-Outputs to `dist/` directory.
+Runs `tsc && vite build`. Outputs to `dist/` directory.
 
 **Native Application**:
 ```bash
@@ -178,7 +184,7 @@ bucketstack/
 │   ├── StorageAnalytics.tsx      # Storage analysis and charts
 │   └── [Other modals and utilities]
 ├── hooks/
-│   └── useMenuBar.ts             # Menu bar integration
+│   └── useMenuBar.ts             # Menu bar integration (macOS native menu)
 ├── types.ts                       # TypeScript interfaces
 ├── index.tsx                      # Entry point (routes to App or TrayWindow)
 ├── App.tsx                        # Main app component
