@@ -1,4 +1,4 @@
-name: Release Build (Windows & Linux)
+name: Release Build (Windows, Linux & macOS)
 
 on:
   push:
@@ -149,9 +149,83 @@ jobs:
           projectPath: ./
           args: ''
 
+  build-macos:
+    needs: [build-frontend]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: '1.1.8'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Import signing certificate
+        run: |
+          echo "${{ secrets.APPLE_CERTIFICATE }}" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p temp-ci build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p temp-ci build.keychain
+          security import /tmp/certificate.p12 -k build.keychain -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -s build.keychain ~/Library/Keychains/login.keychain-db
+          security default-keychain -s build.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k temp-ci build.keychain
+          rm /tmp/certificate.p12
+
+      - name: Write notarization API key
+        run: |
+          mkdir -p ~/.private_keys
+          echo "${{ secrets.APPLE_API_KEY_CONTENT }}" | base64 --decode > ~/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+
+      - name: Install dependencies
+        run: bun install
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ~/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+        with:
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: 'BucketStack ${{ inputs.tag || github.ref_name }}'
+          releaseBody: 'See assets for all platform builds'
+          releaseDraft: true
+          prerelease: false
+          projectPath: ./
+          args: --target universal-apple-darwin
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain build.keychain || true
+          security list-keychains -s ~/Library/Keychains/login.keychain-db
+          rm -f ~/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+
   generate-manifest:
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     steps:
       - uses: actions/checkout@v4
 
@@ -186,16 +260,14 @@ jobs:
           # Extract asset filenames and build platform entries
           ASSETS=$(echo "$RELEASE" | jq -r '.assets[].name')
 
-          # macOS (manually uploaded after notarization)
-          MACOS_TAR=$(echo "$ASSETS" | grep -E 'BucketStack_.*_(aarch64|x64)\.tar\.gz$' | grep -v '\.sig$' | head -1 || true)
+          # macOS (universal binary: aarch64 + x86_64)
+          MACOS_TAR=$(echo "$ASSETS" | grep -E 'BucketStack_.*_universal\.tar\.gz$' | grep -v '\.sig$' | head -1 || true)
           if [ ! -z "$MACOS_TAR" ]; then
             MACOS_SIG="$MACOS_TAR.sig"
-            # Detect arch from filename
-            if echo "$MACOS_TAR" | grep -q "aarch64"; then
-              MANIFEST=$(echo "$MANIFEST" | jq ".platforms[\"darwin-aarch64\"] = {\"signature\": \"https://github.com/$REPO/releases/download/$TAG/$MACOS_SIG\", \"url\": \"https://github.com/$REPO/releases/download/$TAG/$MACOS_TAR\"}")
-            else
-              MANIFEST=$(echo "$MANIFEST" | jq ".platforms[\"darwin-x86_64\"] = {\"signature\": \"https://github.com/$REPO/releases/download/$TAG/$MACOS_SIG\", \"url\": \"https://github.com/$REPO/releases/download/$TAG/$MACOS_TAR\"}")
-            fi
+            MACOS_URL="https://github.com/$REPO/releases/download/$TAG/$MACOS_TAR"
+            MACOS_SIG_URL="https://github.com/$REPO/releases/download/$TAG/$MACOS_SIG"
+            MANIFEST=$(echo "$MANIFEST" | jq ".platforms[\"darwin-aarch64\"] = {\"signature\": \"$MACOS_SIG_URL\", \"url\": \"$MACOS_URL\"}")
+            MANIFEST=$(echo "$MANIFEST" | jq ".platforms[\"darwin-x86_64\"] = {\"signature\": \"$MACOS_SIG_URL\", \"url\": \"$MACOS_URL\"}")
           fi
 
           # Windows
@@ -220,3 +292,42 @@ jobs:
 
           # Upload manifest
           gh release upload "$TAG" latest.json --clobber
+
+  bump-version:
+    runs-on: ubuntu-latest
+    needs: [generate-manifest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: Bump patch version
+        run: |
+          TAG=${{ inputs.tag || github.ref_name }}
+          VERSION=${TAG#v}
+
+          # Increment patch version (e.g. 1.0.2 → 1.0.3)
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "Bumping $VERSION → $NEW_VERSION"
+
+          # package.json
+          jq --arg v "$NEW_VERSION" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+
+          # tauri.conf.json
+          jq --arg v "$NEW_VERSION" '.version = $v' tauri.conf.json > tmp.json && mv tmp.json tauri.conf.json
+
+          # Cargo.toml (first occurrence only — the [package] version)
+          sed -i "0,/^version = \"$VERSION\"/s/version = \"$VERSION\"/version = \"$NEW_VERSION\"/" Cargo.toml
+
+          # Cargo.lock (the BucketStack package entry)
+          sed -i "/^name = \"BucketStack\"/{n;s/version = \"$VERSION\"/version = \"$NEW_VERSION\"/}" Cargo.lock
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json tauri.conf.json Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to $NEW_VERSION"
+          git push origin main
