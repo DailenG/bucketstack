@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Cloud, Server, Database, Box, Eye, Globe, MoreVertical, RefreshCw, History, Shield, CheckCircle2, Pin, BarChart3, Star, XCircle, Settings, Info } from 'lucide-react';
+import { Plus, Trash2, Edit2, Cloud, Server, Database, Box, Eye, Globe, MoreVertical, RefreshCw, History, Shield, CheckCircle2, Pin, BarChart3, Star, XCircle, Settings, Info, Download } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { ThemeToggle } from './ThemeToggle';
 import { S3Account, FavouriteItem } from '../types';
@@ -27,6 +27,9 @@ interface SidebarProps {
   onShowTerms?: () => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;
   onResetApplication?: () => void;
+  updateAvailable?: boolean;
+  isInstallingUpdate?: boolean;
+  onInstallUpdate?: () => void;
 }
 
 const AccountIcon: React.FC<{ account: S3Account, className?: string }> = ({ account, className }) => {
@@ -77,6 +80,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onReloadPermissions,
   onShowToast,
   onResetApplication,
+  updateAvailable = false,
+  isInstallingUpdate = false,
+  onInstallUpdate,
 }) => {
   const { theme } = useTheme();
   const [accountContextMenu, setAccountContextMenu] = useState<{ x: number, y: number, accountId: string } | null>(null);
@@ -119,6 +125,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="text-sm font-semibold text-[var(--text-primary)]">BucketStack</span>
         </div>
       </div>
+
+      {updateAvailable && (
+        <button
+          onClick={onInstallUpdate}
+          disabled={isInstallingUpdate}
+          className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <Download size={13} className="text-green-600 shrink-0" />
+          <div className="flex flex-col items-start min-w-0">
+            <span className="text-[11px] font-semibold text-green-700 leading-tight">
+              {isInstallingUpdate ? 'Installing...' : 'Update Available'}
+            </span>
+            <span className="text-[10px] text-green-600/80 leading-tight">
+              {isInstallingUpdate ? 'Please wait' : 'Click to install & restart'}
+            </span>
+          </div>
+          {!isInstallingUpdate && (
+            <span className="ml-auto w-2 h-2 bg-green-500 rounded-full animate-pulse shrink-0" />
+          )}
+        </button>
+      )}
 
       {/* Permission Legend */}
       <div className="px-4 pb-3 mb-1 border-b border-[var(--border-primary)]/50">

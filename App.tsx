@@ -96,6 +96,8 @@ const App: React.FC = () => {
 
   // Version Check State
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<any>(null);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
 
   // Refs for listeners
@@ -188,13 +190,30 @@ const App: React.FC = () => {
   // Check for app updates
   useEffect(() => {
     const checkForUpdates = async () => {
-      const versionInfo = await versionService.getLatestVersion();
-      if (versionInfo.isUpdateAvailable) {
+      const update = await versionService.checkForUpdate();
+      if (update) {
         setUpdateAvailable(true);
+        setPendingUpdate(update);
       }
     };
     checkForUpdates();
   }, []);
+
+  const handleInstallUpdate = async () => {
+    if (!pendingUpdate || isInstalling) return;
+    setIsInstalling(true);
+    try {
+      await versionService.installAndRelaunch(pendingUpdate, (downloaded, total) => {
+        if (total) {
+          const pct = Math.round((downloaded / total) * 100);
+          showToast(`Downloading update... ${pct}%`, 'success');
+        }
+      });
+    } catch (error: any) {
+      showToast(`Update failed: ${error.message}`, 'error');
+      setIsInstalling(false);
+    }
+  };
 
   // Permission Check Logic
   const checkAccountPermissions = async (account: S3Account, showToastOnchange = false) => {
@@ -1812,6 +1831,9 @@ const App: React.FC = () => {
           }}
           onShowToast={showToast}
           onResetApplication={() => setResetAppConfirm(true)}
+          updateAvailable={updateAvailable}
+          isInstallingUpdate={isInstalling}
+          onInstallUpdate={handleInstallUpdate}
         />
 
         {/* Main Content Area */}
@@ -1894,7 +1916,8 @@ const App: React.FC = () => {
               favourites={favourites}
               onToggleFavourite={handleToggleFavourite}
               updateAvailable={updateAvailable}
-              onDownloadUpdate={() => versionService.openDownloadPage()}
+              isInstallingUpdate={isInstalling}
+              onDownloadUpdate={handleInstallUpdate}
             />
           )}
 

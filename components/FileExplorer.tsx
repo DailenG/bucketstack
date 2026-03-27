@@ -50,6 +50,7 @@ interface FileExplorerProps {
   favourites?: FavouriteItem[];
   onToggleFavourite?: (object: S3Object) => void;
   updateAvailable?: boolean;
+  isInstallingUpdate?: boolean;
   onDownloadUpdate?: () => void;
 }
 
@@ -93,6 +94,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   favourites = [],
   onToggleFavourite,
   updateAvailable = false,
+  isInstallingUpdate = false,
   onDownloadUpdate,
 }) => {
   const isTrash = currentPrefix?.startsWith('.trash/') || false;
@@ -958,10 +960,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           {updateAvailable && (
             <button
               onClick={onDownloadUpdate}
-              className="px-4 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors flex items-center gap-2 border border-green-200"
+              disabled={isInstallingUpdate}
+              className="px-4 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors flex items-center gap-2 border border-green-200 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-              Update Available - Download
+              <span className={`w-2 h-2 bg-green-500 rounded-full ${isInstallingUpdate ? '' : 'animate-pulse'}`}></span>
+              {isInstallingUpdate ? 'Installing...' : 'Update Available — Install & Restart'}
             </button>
           )}
           <TipCarousel />

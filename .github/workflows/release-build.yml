@@ -326,8 +326,14 @@ jobs:
           # Cargo.lock (the BucketStack package entry)
           sed -i "/^name = \"BucketStack\"/{n;s/version = \"$VERSION\"/version = \"$NEW_VERSION\"/}" Cargo.lock
 
+          # Update site fallback URLs to the just-released version
+          REPO="SaiAkashNeela/bucketstack"
+          sed -i "s|releases/download/v[0-9.]\+/BucketStack_[0-9.]\+_aarch64\.dmg|releases/download/v$VERSION/BucketStack_${VERSION}_aarch64.dmg|g" bucketstack-site/services/releaseService.ts
+          sed -i "s|releases/download/v[0-9.]\+/BucketStack_[0-9.]\+_x64-setup\.exe|releases/download/v$VERSION/BucketStack_${VERSION}_x64-setup.exe|g" bucketstack-site/services/releaseService.ts
+          sed -i "s|releases/tag/v[0-9.]\+|releases/tag/v$VERSION|g" bucketstack-site/services/releaseService.ts
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json tauri.conf.json Cargo.toml Cargo.lock
+          git add package.json tauri.conf.json Cargo.toml Cargo.lock bucketstack-site/services/releaseService.ts
           git commit -m "chore: bump version to $NEW_VERSION"
           git push origin main

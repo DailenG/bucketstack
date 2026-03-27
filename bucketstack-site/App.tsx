@@ -111,7 +111,7 @@ function App() {
             <div className="text-center max-w-4xl mx-auto mb-16">
               <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-semibold mb-6 border border-blue-100">
                 <span className="flex h-2 w-2 rounded-full bg-blue-500 mr-2 animate-pulse"></span>
-                v1.0.1
+                {downloadLinks?.version ? `v${downloadLinks.version}` : 'v1.0.1'}
               </div>
               <h1 className="text-5xl md:text-7xl font-bold text-gray-900 tracking-tight mb-8 leading-[1.1]">
                 Manage S3 Buckets <br className="hidden md:block" />
@@ -404,7 +404,7 @@ function App() {
 
             <div className="pt-8 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
               <p className="text-sm text-gray-500">© {new Date().getFullYear()} BucketStack. Open Source under MIT License.</p>
-              <a href="#" className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full text-sm font-medium hover:bg-yellow-100 transition-colors">
+              <a href="https://buymeacoffee.com/akash.neela" className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full text-sm font-medium hover:bg-yellow-100 transition-colors">
                 <Coffee size={16} />
                 <span>Buy me a coffee</span>
               </a>
