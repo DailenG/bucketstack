@@ -66,13 +66,20 @@
 
 ### Building for Production
 
-#### Quick Build (Signed, Not Notarized)
+**All platforms build automatically via GitHub Actions CI** when a version tag is pushed:
+
 ```bash
-./scripts/build.sh
+git tag v1.0.3
+git push origin refs/tags/v1.0.3
 ```
 
-**Output:** `target/release/bundle/macos/BucketStack_<version>_<arch>.dmg`
+This triggers the release workflow which builds Windows, Linux, and macOS (universal binary) in parallel, signs and notarizes the macOS build, publishes the GitHub release, and auto-bumps the version for the next release.
 
+**macOS local build** (signed, not notarized):
+```bash
+./scripts/build.sh     # Build and sign
+./scripts/notarize.sh  # Notarize and create DMG
+```
 
 ---
 
@@ -121,7 +128,6 @@ BucketStack works with any S3-compatible service:
 - **Wasabi** - Enterprise cloud storage
 - **Backblaze B2** - Cost-effective cloud storage
 - **MinIO** - Self-hosted S3-compatible servers
-- **Railway** - Integrated deployment platform support
 - **Custom S3 Endpoints** - Any S3-compatible service
 
 ### 📂 Advanced File Management
@@ -202,7 +208,9 @@ bucketstack/
 │   ├── AccountModal.tsx # Account configuration dialog
 │   └── ...
 ├── services/           # Business Logic
-│   └── s3Service.ts    # S3 operations & credential management
+│   ├── s3Service.ts    # S3 operations & credential management
+│   ├── activityService.ts # Activity logging wrappers
+│   └── versionService.ts  # In-app update checks & install
 ├── hooks/              # Custom React Hooks
 │   └── useMenuBar.ts  # Menu bar integration
 ├── src/                # Rust Backend
@@ -222,16 +230,19 @@ bucketstack/
 
 ```bash
 # Development
-pnpm run dev           # Start web development server
-pnpm run tauri:dev     # Start Tauri development app
+pnpm run dev              # Start web development server
+pnpm run tauri:dev        # Start Tauri development app
+
+# Type checking
+pnpm exec tsc --noEmit    # Check TypeScript without building
 
 # Building
-pnpm run build         # Build for web production
-pnpm run tauri:build   # Build native desktop app
+pnpm run build            # Build for web production
+pnpm run tauri:build      # Build native desktop app
 
-# Build & Notarization (macOS)
-./scripts/build.sh     # Build and sign
-./scripts/notarize.sh  # Notarize and create DMG
+# macOS local build & notarization
+./scripts/build.sh        # Build and sign
+./scripts/notarize.sh     # Notarize and create DMG
 ```
 
 ### Code Quality
@@ -245,15 +256,18 @@ pnpm run tauri:build   # Build native desktop app
 
 ## 📦 Distribution
 
-### Building for Distribution
+### Releases
 
-**Quick Summary:**
-1. Set up `.env` with Apple credentials (for macOS notarization)
-2. Distribute the DMG file from `target/release/bundle/macos/`
+All releases are built and published automatically via GitHub Actions CI. Each release includes:
+- **macOS**: Universal DMG (Apple Silicon + Intel), signed and notarized
+- **Windows**: MSI and NSIS installer
+- **Linux**: AppImage and DEB package
 
-### Update Mechanism
+Download the latest release from [GitHub Releases](https://github.com/SaiAkashNeela/bucketstack/releases).
 
-BucketStack includes an in-app update mechanism. See [UPDATES.md](./UPDATES.md) for setup instructions.
+### In-App Updates
+
+BucketStack checks for updates automatically on launch. When a new version is available, a green **"Update Available — Install & Restart"** banner appears below the logo in the sidebar. Clicking it downloads and installs the update in-app, then relaunches automatically — no browser or manual download needed.
 
 ---
 
