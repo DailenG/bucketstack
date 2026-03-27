@@ -40,9 +40,9 @@ export const releaseService = {
       // Fallback to v1.0.1
       return {
         version: null,
-        macos: 'https://github.com/SaiAkashNeela/bucketstack/releases/download/v1.0.1/BucketStack_1.0.1_aarch64.dmg',
-        windows: 'https://github.com/SaiAkashNeela/bucketstack/releases/download/v1.0.1/BucketStack_1.0.1_x64-setup.exe',
-        linux: 'https://github.com/SaiAkashNeela/bucketstack/releases/tag/v1.0.1',
+        macos: 'https://github.com/SaiAkashNeela/bucketstack/releases/download/v1.0.3/BucketStack_1.0.3_aarch64.dmg',
+        windows: 'https://github.com/SaiAkashNeela/bucketstack/releases/download/v1.0.3/BucketStack_1.0.3_x64-setup.exe',
+        linux: 'https://github.com/SaiAkashNeela/bucketstack/releases/tag/v1.0.3',
       };
     }
 
