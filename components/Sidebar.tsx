@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Edit2, Cloud, Server, Database, Box, Eye, Globe, MoreVertical, RefreshCw, History, Shield, CheckCircle2, Pin, BarChart3, Star, XCircle, Settings, Info, Download } from 'lucide-react';
+import { getVersion } from '@tauri-apps/api/app';
 import { useTheme } from './ThemeProvider';
 import { ThemeToggle } from './ThemeToggle';
 import { S3Account, FavouriteItem } from '../types';
@@ -88,7 +89,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [accountContextMenu, setAccountContextMenu] = useState<{ x: number, y: number, accountId: string } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
   const settingsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion(''));
+  }, []);
 
 
   const handleAccountContext = (e: React.MouseEvent, accountId: string) => {
@@ -431,7 +437,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* About Modal */}
-      <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} version="1.0.1" />
+      <AboutModal isOpen={showAbout} onClose={() => setShowAbout(false)} version={appVersion} />
 
       {/* Account Context Menu */}
       {
